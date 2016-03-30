@@ -156,7 +156,7 @@ fn process_eu4_data(data: Eu4SourceData) -> Eu4TargetData {
             .collect();
         let province_name = province_segments.iter().nth(1).unwrap().to_string();
         let province_id = province_segments.iter().nth(0).unwrap().to_string();
-        let new_country_file_name = province_name + ".txt";
+        let new_country_file_name = format!("{}.txt", province_name);
 
         // Make a new country with the old country's and data
         let mut new_country = old_country.clone();
@@ -189,9 +189,11 @@ fn process_eu4_data(data: Eu4SourceData) -> Eu4TargetData {
         province.data.set("add_core", Eu4Value::String(new_country_tag.clone()));
 
         // Fix the HRE electors, only stay an elector if the country was the old country's capital
-        if province.data.get("elector").map(|v| v.as_str() == "yes").unwrap_or(false) {
+        if new_country_history.data.get("elector").map(|v| v.as_str() == "yes").unwrap_or(false) {
             if old_country_history.data.get("capital").unwrap().as_str() != province_id {
-                province.data.set("elector", Eu4Value::String("no".into()));
+                new_country_history.data.set("elector", Eu4Value::String("no".into()));
+            } else {
+                println!("Granted elector status to {}", province_name);
             }
         }
 
