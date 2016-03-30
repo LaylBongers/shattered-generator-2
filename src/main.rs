@@ -50,9 +50,14 @@ fn load_eu4_data_provinces(config: &Config) {
     assert!(provinces_dir.is_dir(), "\"{}\" is not an existing directory", provinces_dir.display());
 
     // Get all the files from that directory
-    for file in provinces_dir.read_dir().unwrap() {
+    for file_r in provinces_dir.read_dir().unwrap() {
+        let file = file_r.unwrap();
+        println!("Loading {:?}...", file.file_name());
+
         // Load the entire file
-        let text = file::read_all_win_1252(file.unwrap().path());
+        let text = file::read_all_win_1252(file.path());
         let _data = Eu4Table::parse(&text);
     }
+
+    println!("Done parsing provinces!");
 }
