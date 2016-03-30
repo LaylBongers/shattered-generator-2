@@ -11,6 +11,14 @@ pub enum Eu4Value {
 }
 
 impl Eu4Value {
+    pub fn color(r: u8, g: u8, b: u8) -> Self {
+        Eu4Value::Array(vec![
+            Eu4Value::String(r.to_string()),
+            Eu4Value::String(g.to_string()),
+            Eu4Value::String(b.to_string())
+        ])
+    }
+
     pub fn as_str(&self) -> &str {
         if let &Eu4Value::String(ref val) = self {
             val
@@ -201,6 +209,22 @@ impl Eu4Table {
         }
 
         target
+    }
+
+    pub fn get(&self, key: &str) -> Option<&Eu4Value> {
+        self.values.iter().find(|v| v.key == key).map(|v| &v.value)
+    }
+
+    pub fn set(&mut self, key: &str, value: Eu4Value) {
+        // Check if a value already exists with this key
+        if let Some(ref mut entry) = self.values.iter_mut().find(|v| v.key == key) {
+            // It does, overwrite it
+            entry.value = value;
+            return; // < Can't use else, borrow checking complains
+        }
+
+        // It doesn't, add it
+        self.values.push(Eu4KeyValue { key: key.into(), value: value });
     }
 }
 
