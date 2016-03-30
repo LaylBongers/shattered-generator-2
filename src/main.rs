@@ -35,29 +35,54 @@ fn prepare_output(config: &Config) {
 fn load_eu4_data(config: &Config) {
     println!("=== loading eu4 game data ===");
 
-    load_eu4_data_provinces(config);
+    let provinces = load_eu4_data_provinces(config);
+    let countries = load_eu4_data_countries(config);
 
     println!("");
 }
 
-fn load_eu4_data_provinces(config: &Config) {
+fn load_eu4_data_provinces(config: &Config) -> Vec<Eu4Table> {
     println!("Loading provinces...");
 
     // Get a path for the folder the provinces are in
-    let mut provinces_dir = config.game_path.clone();
-    provinces_dir.push("history");
-    provinces_dir.push("provinces");
-    assert!(provinces_dir.is_dir(), "\"{}\" is not an existing directory", provinces_dir.display());
+    let mut dir = config.game_path.clone();
+    dir.push("history");
+    dir.push("provinces");
+    assert!(dir.is_dir(), "\"{}\" is not an existing directory", dir.display());
 
     // Get all the files from that directory
-    for file_r in provinces_dir.read_dir().unwrap() {
+    let mut provinces = Vec::new();
+    for file_r in dir.read_dir().unwrap() {
         let file = file_r.unwrap();
-        println!("Loading {:?}...", file.file_name());
+        //println!("Loading {:?}...", file.file_name());
 
         // Load the entire file
         let text = file::read_all_win_1252(file.path());
-        let _data = Eu4Table::parse(&text);
+        provinces.push(Eu4Table::parse(&text));
     }
 
-    println!("Done parsing provinces!");
+    provinces
+}
+
+fn load_eu4_data_countries(config: &Config) -> Vec<Eu4Table> {
+    println!("Loading countries...");
+
+    // Get a path for the folder the provinces are in
+    let mut dir = config.game_path.clone();
+    dir.push("common");
+    dir.push("countries");
+    assert!(dir.is_dir(), "\"{}\" is not an existing directory", dir.display());
+
+    // Get all the files from that directory
+    let mut countries = Vec::new();
+    for file_r in dir.read_dir().unwrap() {
+        let file = file_r.unwrap();
+        //println!("Loading {:?}...", file.file_name());
+
+        // Load the entire file
+        let text = file::read_all_win_1252(file.path());
+        countries.push(Eu4Table::parse(&text));
+    }
+
+    countries
 }

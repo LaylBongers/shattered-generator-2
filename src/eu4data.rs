@@ -1,10 +1,11 @@
-use combine::{many, many1, parser, Parser, ParserExt, space, spaces, newline, satisfy, skip_many, token, string, any, unexpected, between};
+use combine::{many, many1, parser, Parser, ParserExt, space, spaces, newline, satisfy, skip_many, token, string, any, unexpected, between, try};
 use combine::primitives::{State, Stream, ParseResult};
 
 #[derive(Debug)]
 pub enum Eu4Value {
     String(String),
     Table(Eu4Table),
+    Array(Vec<Eu4Value>)
 }
 
 impl Eu4Value {
@@ -97,7 +98,17 @@ fn value<I>(input: State<I>) -> ParseResult<Eu4Value, I>
         .or(parser(string_literal)
             .map(|v| Eu4Value::String(v)))
         .or((token('{'), parser(table), token('}'))
-            .map(|v| Eu4Value::Table(v.1)));
+            .map(|v| {
+                let table = v.1;
+
+                // Devolve table to array if keyless
+                // TODO: Perhaps instead use try() to attempt to parse a table first, then an array
+                if table.values.iter().all(|v| v.key == "") {
+                    Eu4Value::Array(table.values.into_iter().map(|v| v.value).collect())
+                } else {
+                    Eu4Value::Table(table)
+                }
+            }));
 
     value.expected("value").parse_state(input)
 }
@@ -105,19 +116,32 @@ fn value<I>(input: State<I>) -> ParseResult<Eu4Value, I>
 fn key_value<I>(input: State<I>) -> ParseResult<Eu4KeyValue, I>
     where I: Stream<Item=char>
 {
-    let mut key_value = (parser(word), spaces(), token('='), spaces(), parser(value))
+    let key_value = (parser(word), spaces(), token('='), spaces(), parser(value))
         .map(|v| Eu4KeyValue {
             key: v.0,
             value: v.4,
         });
 
-    key_value.parse_state(input)
+    key_value.expected("key-value").parse_state(input)
+}
+
+fn keyless_value<I>(input: State<I>) -> ParseResult<Eu4KeyValue, I>
+    where I: Stream<Item=char>
+{
+    let key_value = parser(value)
+        .map(|v| Eu4KeyValue {
+            key: "".into(),
+            value: v,
+        });
+
+    key_value.expected("keyless value").parse_state(input)
 }
 
 fn table<I>(input: State<I>) -> ParseResult<Eu4Table, I>
     where I: Stream<Item=char>
 {
-    let table = many(parser(key_value).skip(skip_many(parser(nl_ws)))).map(|v| {
+    let table = many(try(parser(key_value)).or(parser(keyless_value)).skip(skip_many(parser(nl_ws))))
+        .map(|v| {
             Eu4Table {
                 values: v
             }
@@ -234,6 +258,20 @@ mod tests {
             assert_eq!(table.values[1].value.as_str(), "frogs");
         } else {
             assert!(false, "Wrong value type!");
+        }
+    }
+
+    #[test]
+    fn parse_array() {
+        let data = Eu4Table::parse("foo={why \"does this\" exist}");
+        assert_eq!(data.values.len(), 1);
+        assert_eq!(data.values[0].key, "foo");
+
+        if let &Eu4Value::Array(ref array) = &data.values[0].value {
+            assert_eq!(array.len(), 3);
+            assert_eq!(array[0].as_str(), "why");
+            assert_eq!(array[1].as_str(), "does this");
+            assert_eq!(array[2].as_str(), "exist");
         }
     }
 }
