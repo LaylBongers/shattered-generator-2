@@ -1,7 +1,9 @@
+extern crate combine;
+
 use combine::{many, many1, parser, Parser, ParserExt, space, spaces, newline, satisfy, skip_many, token, string, any, unexpected, between, try};
 use combine::primitives::{State, Stream, ParseResult};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Eu4Value {
     String(String),
     Table(Eu4Table),
@@ -18,15 +20,15 @@ impl Eu4Value {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Eu4KeyValue {
-    key: String,
-    value: Eu4Value,
+    pub key: String,
+    pub value: Eu4Value,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Eu4Table {
-    values: Vec<Eu4KeyValue>,
+    pub values: Vec<Eu4KeyValue>,
 }
 
 fn nl_ws<I>(input: State<I>) -> ParseResult<(), I>
@@ -156,9 +158,72 @@ fn eu4data<I>(input: State<I>) -> ParseResult<Eu4Table, I>
     parser(table).parse_state(input)
 }
 
+fn escape_str(text: &str) -> String {
+    let mut target = String::new();
+
+    target.push('\"');
+    for c in text.chars() {
+        match c {
+            '\\' => target.push_str("\\\\"),
+            _ => target.push(c)
+        };
+    }
+    target.push('\"');
+
+    target
+}
+
+fn escape_str_if_needed(text: &str) -> String {
+    if text.chars().any(|c| c == '\\' || c == ' ') {
+        escape_str(text)
+    } else {
+        text.into()
+    }
+}
+
 impl Eu4Table {
     pub fn parse(text: &str) -> Eu4Table {
         parser(eu4data).parse(text).unwrap().0
+    }
+
+    pub fn serialize(&self) -> String {
+        let mut target = String::new();
+
+        for key_value in &self.values {
+            // Serialize the key if we have one
+            if key_value.key != "" {
+                target.push_str(&escape_str_if_needed(&key_value.key));
+                target.push_str(" = ");
+            }
+
+            // Serialize the value
+            key_value.value.serialize_to(&mut target);
+        }
+
+        target
+    }
+}
+
+impl Eu4Value {
+    fn serialize_to(&self, target: &mut String) {
+        match self {
+            &Eu4Value::String(ref v) => {
+                target.push_str(&escape_str_if_needed(v));
+                target.push('\n');
+            },
+            &Eu4Value::Table(ref t) => {
+                target.push_str("{\n");
+                target.push_str(&t.serialize());
+                target.push_str("}\n");
+            },
+            &Eu4Value::Array(ref a) => {
+                target.push_str("{\n");
+                for val in a {
+                    val.serialize_to(target);
+                }
+                target.push_str("}\n");
+            }
+        }
     }
 }
 

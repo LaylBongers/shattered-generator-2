@@ -4,6 +4,8 @@ version = "0.1.0"
 authors = ["Layl <LaylConway@users.noreply.github.com>"]
 
 [dependencies]
-combine = "1.2.1"
 encoding = "0.2.32"
 toml = "0.1.28"
+
+[dependencies.eu4data]
+path = "./eu4data"

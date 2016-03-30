@@ -2,8 +2,8 @@
 name = "shattered-generator"
 version = "0.1.0"
 dependencies = [
- "combine 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "encoding 0.2.32 (registry+https://github.com/rust-lang/crates.io-index)",
+ "eu4data 0.1.0",
  "toml 0.1.28 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -68,6 +68,13 @@ dependencies = [
 name = "encoding_index_tests"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "eu4data"
+version = "0.1.0"
+dependencies = [
+ "combine 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
 
 [[package]]
 name = "rustc-serialize"
