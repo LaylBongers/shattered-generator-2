@@ -17,7 +17,8 @@ fn main() {
     prepare_output(&config);
     let source_data = load_eu4_data(&config);
     let target_data = process_eu4_data(source_data);
-    write_eu4_data(&config, target_data);
+    write_eu4_data(&config, &target_data);
+    write_eu4_localization(&config, &target_data);
 }
 
 fn prepare_output(config: &Config) {
@@ -107,11 +108,17 @@ fn load_eu4_data_from_folder(base: &PathBuf, sub1: &str, sub2: &str) -> Vec<File
     data
 }
 
+struct Eu4Localization {
+    key: String,
+    string: String,
+}
+
 struct Eu4TargetData {
     provinces: Vec<FileTable>,
     countries: Vec<FileTable>,
     country_history: Vec<FileTable>,
-    country_tags: Eu4Table
+    country_tags: Eu4Table,
+    localizations: Vec<Eu4Localization>,
 }
 
 fn process_eu4_data(data: Eu4SourceData) -> Eu4TargetData {
@@ -122,6 +129,7 @@ fn process_eu4_data(data: Eu4SourceData) -> Eu4TargetData {
     let mut countries: Vec<FileTable> = Vec::new();
     let mut country_history: Vec<FileTable> = Vec::new();
     let mut country_tags = data.country_tags.clone();
+    let mut localizations: Vec<Eu4Localization> = Vec::new();
 
     println!("Clearing events on provinces...");
     for province in &mut provinces {
@@ -173,6 +181,7 @@ fn process_eu4_data(data: Eu4SourceData) -> Eu4TargetData {
             &new_country_tag,
             Eu4Value::String(String::from("countries/") + &new_country_file_name));
         new_country_history.file_name = format!("{} - {}", new_country_tag, new_country_file_name);
+        localizations.push(Eu4Localization { key: new_country_tag.clone(), string: province_name.clone() });
 
         // Make the country's culture and religion match the province it was generated from
         new_country_history.data.set("culture", province.data.get("culture").unwrap().clone());
@@ -209,6 +218,7 @@ fn process_eu4_data(data: Eu4SourceData) -> Eu4TargetData {
         countries: countries,
         country_history: country_history,
         country_tags: country_tags,
+        localizations: localizations,
     }
 }
 
@@ -250,7 +260,7 @@ fn get_tag_for_num(num: i32) -> String {
     ::std::str::from_utf8(&b).unwrap().to_string()
 }
 
-fn write_eu4_data(config: &Config, data: Eu4TargetData) {
+fn write_eu4_data(config: &Config, data: &Eu4TargetData) {
     println!("=== serializing to target ===");
 
     write_eu4_data_to_folder(&config.target_path, "history", "provinces", &data.provinces);
@@ -264,6 +274,8 @@ fn write_eu4_data(config: &Config, data: Eu4TargetData) {
     fs::create_dir_all(&file).unwrap();
     file.push("00_countries.txt");
     file::write_all_win_1252(file, &data.country_tags.serialize());
+
+    println!("");
 }
 
 fn write_eu4_data_to_folder(base: &PathBuf, sub1: &str, sub2: &str, entries: &Vec<FileTable>) {
@@ -282,4 +294,28 @@ fn write_eu4_data_to_folder(base: &PathBuf, sub1: &str, sub2: &str, entries: &Ve
 
         file::write_all_win_1252(file, &entry.data.serialize());
     }
+}
+
+fn write_eu4_localization(config: &Config, data: &Eu4TargetData) {
+    println!("=== generating localization ===");
+
+    // Read in the original
+    let mut game_loc = config.game_path.clone();
+    game_loc.push("localisation");
+    game_loc.push("countries_l_english.yml");
+    let mut text = file::read_all_text(&game_loc);
+
+    // Append our own localization data
+    for entry in &data.localizations {
+        text.push_str(&format!("\n {}: {}", entry.key, entry.string));
+    }
+
+    // Write the result
+    let mut target_loc = config.target_path.clone();
+    target_loc.push("localisation");
+    fs::create_dir_all(&target_loc).unwrap();
+    target_loc.push("countries_l_english.yml");
+    file::write_all_text(&target_loc, &text);
+    
+    println!("");
 }

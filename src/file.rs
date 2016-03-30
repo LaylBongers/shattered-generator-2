@@ -13,6 +13,11 @@ pub fn read_all_text<P: AsRef<Path>>(path: P) -> String {
     data
 }
 
+pub fn write_all_text<P: AsRef<Path>>(path: P, text: &str) {
+    let mut file = File::create(path).unwrap();
+    file.write_all(text.as_bytes()).unwrap();
+}
+
 pub fn read_all_win_1252<P: AsRef<Path>>(path: P) -> String {
     let mut file = File::open(path).unwrap();
 
