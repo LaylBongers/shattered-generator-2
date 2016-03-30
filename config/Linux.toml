@@ -1,0 +1,4 @@
+# This is a template with default values for linux
+mod_name = "Shattered Universalis"
+target_path = "<REPLACE WITH USER ROOT, ~ will not work>/.local/share/Paradox Interactive/Europa Universalis IV/mod/shattered"
+game_path = "<REPLACE WITH ACTUAL GAME INSTALL PATH>"
