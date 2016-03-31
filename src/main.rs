@@ -1,4 +1,5 @@
 extern crate encoding;
+extern crate imagefmt;
 extern crate rand;
 extern crate toml;
 extern crate eu4data;
@@ -8,6 +9,7 @@ mod file;
 
 use std::fs;
 use std::path::PathBuf;
+use imagefmt::{ColFmt, ColType};
 use rand::{Rng, StdRng};
 use config::Config;
 use eu4data::{Eu4Table, Eu4Value};
@@ -18,7 +20,10 @@ fn main() {
     let source_data = load_eu4_data(&config);
     let target_data = process_eu4_data(source_data);
     write_eu4_data(&config, &target_data);
-    write_eu4_localization(&config, &target_data);
+
+    println!("=== generating polish data ===");
+    write_eu4_localisation(&config, &target_data);
+    write_eu4_flags(&config, &target_data);
 }
 
 fn prepare_output(config: &Config) {
@@ -113,12 +118,18 @@ struct Eu4Localization {
     string: String,
 }
 
+struct Eu4FlagRequest {
+    tag: String,
+    color: [u8; 3]
+}
+
 struct Eu4TargetData {
     provinces: Vec<FileTable>,
     countries: Vec<FileTable>,
     country_history: Vec<FileTable>,
     country_tags: Eu4Table,
     localizations: Vec<Eu4Localization>,
+    flag_requests: Vec<Eu4FlagRequest>,
 }
 
 fn process_eu4_data(data: Eu4SourceData) -> Eu4TargetData {
@@ -130,6 +141,7 @@ fn process_eu4_data(data: Eu4SourceData) -> Eu4TargetData {
     let mut country_history: Vec<FileTable> = Vec::new();
     let mut country_tags = data.country_tags.clone();
     let mut localizations: Vec<Eu4Localization> = Vec::new();
+    let mut flag_requests: Vec<Eu4FlagRequest> = Vec::new();
 
     println!("Clearing events on provinces...");
     for province in &mut provinces {
@@ -189,8 +201,9 @@ fn process_eu4_data(data: Eu4SourceData) -> Eu4TargetData {
 
         // Generate a color for the country
         // TODO: Improve color generation
-        // TODO: Generate flags
-        new_country.data.set("color", Eu4Value::color(rand.gen(), rand.gen(), rand.gen()));
+        let color = [rand.gen(), rand.gen(), rand.gen()];
+        new_country.data.set("color", Eu4Value::color(color[0], color[1], color[2]));
+        flag_requests.push(Eu4FlagRequest { tag: new_country_tag.clone(), color: color });
 
         // Update the province to be owned by the new country
         province.data.set("owner", Eu4Value::String(new_country_tag.clone()));
@@ -219,6 +232,7 @@ fn process_eu4_data(data: Eu4SourceData) -> Eu4TargetData {
         country_history: country_history,
         country_tags: country_tags,
         localizations: localizations,
+        flag_requests: flag_requests,
     }
 }
 
@@ -296,8 +310,8 @@ fn write_eu4_data_to_folder(base: &PathBuf, sub1: &str, sub2: &str, entries: &Ve
     }
 }
 
-fn write_eu4_localization(config: &Config, data: &Eu4TargetData) {
-    println!("=== generating localization ===");
+fn write_eu4_localisation(config: &Config, data: &Eu4TargetData) {
+    println!("Generating country localisation...");
 
     // Read in the original
     let mut game_loc = config.game_path.clone();
@@ -316,6 +330,37 @@ fn write_eu4_localization(config: &Config, data: &Eu4TargetData) {
     fs::create_dir_all(&target_loc).unwrap();
     target_loc.push("countries_l_english.yml");
     file::write_all_text(&target_loc, &text);
-    
-    println!("");
+}
+
+fn write_eu4_flags(config: &Config, data: &Eu4TargetData) {
+    println!("Generating flags...");
+
+    let mut flag_base = config.target_path.clone();
+    flag_base.push("gfx");
+    flag_base.push("flags");
+    fs::create_dir_all(&flag_base).unwrap();
+
+    for flag in &data.flag_requests {
+        let mut flag_file = flag_base.clone();
+        flag_file.push(format!("{}.tga", flag.tag));
+
+        // Generate the image
+        let size = 128*128;
+        let per_pixel = 3;
+        let mut buffer = vec![0u8; size*per_pixel];
+        for i in 0..size {
+            let actual = i*per_pixel;
+            buffer[actual + 0] = flag.color[0];
+            buffer[actual + 1] = flag.color[1];
+            buffer[actual + 2] = flag.color[2];
+        }
+
+        // Write the image to a file
+        imagefmt::write(
+            &flag_file,
+            128, 128, ColFmt::RGB,
+            &buffer,
+            ColType::Color
+        ).unwrap();
+    }
 }

@@ -5,6 +5,7 @@ authors = ["Layl <LaylConway@users.noreply.github.com>"]
 
 [dependencies]
 encoding = "0.2.32"
+imagefmt = "3.0.1"
 rand = "0.3"
 toml = "0.1.28"
 
