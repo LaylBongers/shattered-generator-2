@@ -331,8 +331,8 @@ fn write_eu4_localisation(config: &Config, data: &Eu4TargetData) {
 
     // Append our own localization data
     for entry in &data.localizations {
-        text.push_str(&format!("\n {}: {}", entry.key, entry.string));
-        text.push_str(&format!("\n {}_ADJ: {}", entry.key, entry.string));
+        text.push_str(&format!("\n {}: \"{}\"", entry.key, entry.string));
+        text.push_str(&format!("\n {}_ADJ: \"{}\"", entry.key, entry.string));
     }
 
     // Write the result
@@ -396,12 +396,14 @@ fn write_eu4_flags(config: &Config, data: &Eu4TargetData) {
 }
 
 fn get_flag_function(rand: &mut StdRng) -> Box<Fn(f32, f32, f32, Rgb, Rgb) -> Rgba> {
-    let num: i32 = rand.gen_range(0, 4);
+    let num: i32 = rand.gen_range(0, 6);
     match num {
         0 => Box::new(func_flat_flag),
         1 => Box::new(func_dashed_flag),
         2 => Box::new(func_dashed_inverted_flag),
         3 => Box::new(func_crossed_flag),
+        4 => Box::new(func_horizontal_line_flag),
+        5 => Box::new(func_vertical_line_flag),
         _ => panic!("Generated flag type out of range")
     }
 }
@@ -429,6 +431,18 @@ fn func_crossed_flag(x: f32, y: f32, area_per_pixel: f32, color: Rgb, color_alt:
         let overlay2 = flag_shader_diagonal(1.0-x, y, color_alt);
         blend(PreAlpha::from(overlay2), blend(PreAlpha::from(overlay1), base))
     })
+}
+
+fn func_horizontal_line_flag(_x: f32, y: f32, _area_per_pixel: f32, color: Rgb, color_alt: Rgb) -> Rgba {
+    let base = flag_shader_flat(color);
+    let overlay = flag_shader_middle_line(y, color_alt);
+    blend(PreAlpha::from(overlay), base)
+}
+
+fn func_vertical_line_flag(x: f32, _y: f32, _area_per_pixel: f32, color: Rgb, color_alt: Rgb) -> Rgba {
+    let base = flag_shader_flat(color);
+    let overlay = flag_shader_middle_line(x, color_alt);
+    blend(PreAlpha::from(overlay), base)
 }
 
 /// Blends source onto dest, source has to be pre-multiplied.
@@ -468,7 +482,15 @@ fn flag_shader_flat(color: Rgb) -> Rgba {
 }
 
 fn flag_shader_diagonal(x: f32, y: f32, color: Rgb) -> Rgba {
-    if f32::abs(x - y) < 0.1 {
+    if f32::abs(x - y) < 0.15 {
+        Rgba::new(color.red, color.green, color.blue, 1.0)
+    } else {
+        Rgba::new(0.0, 0.0, 0.0, 0.0)
+    }
+}
+
+fn flag_shader_middle_line(axis: f32, color: Rgb) -> Rgba {
+    if axis > 0.35 && axis < 0.65 {
         Rgba::new(color.red, color.green, color.blue, 1.0)
     } else {
         Rgba::new(0.0, 0.0, 0.0, 0.0)
