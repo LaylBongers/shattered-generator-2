@@ -201,8 +201,13 @@ fn process_eu4_data(data: Eu4SourceData) -> Eu4TargetData {
         localizations.push(Eu4Localization { key: new_country_tag.clone(), string: province_name.clone() });
 
         // Make the country's culture and religion match the province it was generated from
-        new_country_history.data.set("culture", province.data.get("culture").unwrap().clone());
+        new_country_history.data.set("primary_culture", province.data.get("culture").unwrap().clone());
         new_country_history.data.set("religion", province.data.get("religion").unwrap().clone());
+
+        // Replace papalcies with theocratic governments
+        if new_country_history.data.get("government").unwrap().as_str() == "papal_government" {
+            new_country_history.data.set("government", Eu4Value::String("theocratic_government".into()));
+        }
 
         // Generate a color for the country
         // TODO: Improve color generation
