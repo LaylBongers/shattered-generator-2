@@ -190,6 +190,12 @@ fn escape_str_if_needed(text: &str) -> String {
 }
 
 impl Eu4Table {
+    pub fn new() -> Self {
+        Eu4Table {
+            values: Vec::new()
+        }
+    }
+
     pub fn parse(text: &str) -> Eu4Table {
         parser(eu4data).parse(text).unwrap().0
     }

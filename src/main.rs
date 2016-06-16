@@ -7,12 +7,11 @@ extern crate eu4data;
 
 mod config;
 mod file;
+mod flags;
 
 use std::fs;
 use std::path::PathBuf;
-use imagefmt::{ColFmt, ColType};
-use palette::{Rgb, Rgba};
-use palette::blend::PreAlpha;
+use palette::Rgb;
 use palette::pixel::Srgb;
 use rand::{Rng, StdRng};
 use config::Config;
@@ -27,7 +26,7 @@ fn main() {
 
     println!("=== generating polish data ===");
     write_eu4_localisation(&config, &target_data);
-    write_eu4_flags(&config, &target_data);
+    flags::generate(&config, &target_data);
 }
 
 fn prepare_output(config: &Config) {
@@ -128,11 +127,12 @@ struct Eu4FlagRequest {
     color_alt: Rgb
 }
 
-struct Eu4TargetData {
+pub struct Eu4TargetData {
     provinces: Vec<FileTable>,
     countries: Vec<FileTable>,
     country_history: Vec<FileTable>,
     country_tags: Eu4Table,
+    hre_history: Eu4Table,
     localizations: Vec<Eu4Localization>,
     flag_requests: Vec<Eu4FlagRequest>,
 }
@@ -145,6 +145,7 @@ fn process_eu4_data(data: Eu4SourceData) -> Eu4TargetData {
     let mut countries: Vec<FileTable> = Vec::new();
     let mut country_history: Vec<FileTable> = Vec::new();
     let mut country_tags = data.country_tags.clone();
+    let mut hre_history = Eu4Table::new();
     let mut localizations: Vec<Eu4Localization> = Vec::new();
     let mut flag_requests: Vec<Eu4FlagRequest> = Vec::new();
 
@@ -234,6 +235,15 @@ fn process_eu4_data(data: Eu4SourceData) -> Eu4TargetData {
             }
         }
 
+        // If the old country was HAB (Austria), elect the capital as emperor
+        if old_country_tag == "HAB" {
+            if old_country_history.data.get("capital").unwrap().as_str() == province_id {
+                hre_history.set("1437.12.9", Eu4Value::String(new_country_tag));
+                hre_history.set("1806.7.12", Eu4Value::String("xxx".into()));
+                println!("Granted emperor status to {}", province_name);
+            }
+        }
+
         // Store the actual data in the lists
         countries.push(new_country);
         country_history.push(new_country_history);
@@ -246,6 +256,7 @@ fn process_eu4_data(data: Eu4SourceData) -> Eu4TargetData {
         countries: countries,
         country_history: country_history,
         country_tags: country_tags,
+        hre_history: hre_history,
         localizations: localizations,
         flag_requests: flag_requests,
     }
@@ -304,6 +315,14 @@ fn write_eu4_data(config: &Config, data: &Eu4TargetData) {
     file.push("00_countries.txt");
     file::write_all_win_1252(file, &data.country_tags.serialize());
 
+    // Create the HRE file
+    println!("Serializing HRE history...");
+    let mut file = config.target_path.clone();
+    file.push("history"); file.push("diplomacy");
+    fs::create_dir_all(&file).unwrap();
+    file.push("hre.txt");
+    file::write_all_win_1252(file, &data.hre_history.serialize());
+
     println!("");
 }
 
@@ -346,158 +365,4 @@ fn write_eu4_localisation(config: &Config, data: &Eu4TargetData) {
     fs::create_dir_all(&target_loc).unwrap();
     target_loc.push("countries_l_english.yml");
     file::write_all_text(&target_loc, &text);
-}
-
-fn write_eu4_flags(config: &Config, data: &Eu4TargetData) {
-    println!("Generating flags...");
-
-    // Set up the directory to output flags to
-    let mut flag_base = config.target_path.clone();
-    flag_base.push("gfx");
-    flag_base.push("flags");
-    fs::create_dir_all(&flag_base).unwrap();
-
-    // Go over all requested flags
-    let mut rand = StdRng::new().unwrap();
-    for flag in &data.flag_requests {
-        let mut flag_file = flag_base.clone();
-        flag_file.push(format!("{}.tga", flag.tag));
-
-        // Prepare some data to generate this flag
-        let flag_func = get_flag_function(&mut rand);
-
-        // Generate the image
-        let width = 128;
-        let area_per_pixel = 1.0 / width as f32;
-        let size = width*width;
-        let per_pixel = 3;
-        let mut buffer = vec![0u8; size*per_pixel];
-        for yi in 0..width {
-            for xi in 0..width {
-                // Calculate normalized coordinates
-                let x = (xi as f32) / (width as f32);
-                let y = (yi as f32) / (width as f32);
-
-                // Calculate this pixel's color
-                let color = flag_func(x, y, area_per_pixel, flag.color, flag.color_alt);
-
-                // Calculate and store the color for this pixel
-                let u8_color: [u8; 3] = color.to_pixel();
-                let actual = ((yi*width)+xi)*per_pixel;
-                buffer[actual+0] = u8_color[0];
-                buffer[actual+1] = u8_color[1];
-                buffer[actual+2] = u8_color[2];
-            }
-        }
-
-        // Write the image to a file
-        imagefmt::write(
-            &flag_file,
-            128, 128, ColFmt::RGB,
-            &buffer,
-            ColType::Color
-        ).unwrap();
-    }
-}
-
-fn get_flag_function(rand: &mut StdRng) -> Box<Fn(f32, f32, f32, Rgb, Rgb) -> Rgba> {
-    let num: i32 = rand.gen_range(0, 6);
-    match num {
-        0 => Box::new(func_flat_flag),
-        1 => Box::new(func_dashed_flag),
-        2 => Box::new(func_dashed_inverted_flag),
-        3 => Box::new(func_crossed_flag),
-        4 => Box::new(func_horizontal_line_flag),
-        5 => Box::new(func_vertical_line_flag),
-        _ => panic!("Generated flag type out of range")
-    }
-}
-
-fn func_flat_flag(_x: f32, _y: f32, _area_per_pixel: f32, color: Rgb, _color_alt: Rgb) -> Rgba {
-    flag_shader_flat(color)
-}
-
-fn func_dashed_flag(x: f32, y: f32, area_per_pixel: f32, color: Rgb, color_alt: Rgb) -> Rgba {
-    msaa(x, y, area_per_pixel, |x, y| {
-        let base = flag_shader_flat(color);
-        let overlay = flag_shader_diagonal(x, y, color_alt);
-        blend(PreAlpha::from(overlay), base)
-    })
-}
-
-fn func_dashed_inverted_flag(x: f32, y: f32, area_per_pixel: f32, color: Rgb, color_alt: Rgb) -> Rgba {
-    func_dashed_flag(1.0-x, y, area_per_pixel, color, color_alt)
-}
-
-fn func_crossed_flag(x: f32, y: f32, area_per_pixel: f32, color: Rgb, color_alt: Rgb) -> Rgba {
-    msaa(x, y, area_per_pixel, |x, y| {
-        let base = flag_shader_flat(color);
-        let overlay1 = flag_shader_diagonal(x, y, color_alt);
-        let overlay2 = flag_shader_diagonal(1.0-x, y, color_alt);
-        blend(PreAlpha::from(overlay2), blend(PreAlpha::from(overlay1), base))
-    })
-}
-
-fn func_horizontal_line_flag(_x: f32, y: f32, _area_per_pixel: f32, color: Rgb, color_alt: Rgb) -> Rgba {
-    let base = flag_shader_flat(color);
-    let overlay = flag_shader_middle_line(y, color_alt);
-    blend(PreAlpha::from(overlay), base)
-}
-
-fn func_vertical_line_flag(x: f32, _y: f32, _area_per_pixel: f32, color: Rgb, color_alt: Rgb) -> Rgba {
-    let base = flag_shader_flat(color);
-    let overlay = flag_shader_middle_line(x, color_alt);
-    blend(PreAlpha::from(overlay), base)
-}
-
-/// Blends source onto dest, source has to be pre-multiplied.
-/// TODO: Make use of palette's own blend function
-fn blend(source: PreAlpha<Rgb, f32>, dest: Rgba) -> Rgba {
-    let one_minus_alpha = 1.0 - source.alpha;
-
-    let r = source.red + (dest.red * one_minus_alpha);
-    let g = source.green + (dest.green * one_minus_alpha);
-    let b = source.blue + (dest.blue * one_minus_alpha);
-
-    Rgba::new(r, g, b, 1.0)
-}
-
-/// Multisample the given shader function.
-fn msaa<F: Fn(f32, f32) -> Rgba>(x: f32, y: f32, area: f32, func: F) -> Rgba {
-    let per = area / 4.0;
-    let c0 = func(x + per, y + per);
-    let c1 = func(x + per*3.0, y + per);
-    let c2 = func(x + per, y + per*3.0);
-    let c3 = func(x + per*3.0, y + per*3.0);
-
-    Rgba::new(
-        average(c0.red, c1.red, c2.red, c3.red),
-        average(c0.green, c1.green, c2.green, c3.green),
-        average(c0.blue, c1.blue, c2.blue, c3.blue),
-        1.0
-    )
-}
-
-fn average(v0: f32, v1: f32, v2: f32, v3: f32) -> f32 {
-    v0*0.25 + v1*0.25 + v2*0.25 + v3*0.25
-}
-
-fn flag_shader_flat(color: Rgb) -> Rgba {
-    Rgba::new(color.red, color.green, color.blue, 1.0)
-}
-
-fn flag_shader_diagonal(x: f32, y: f32, color: Rgb) -> Rgba {
-    if f32::abs(x - y) < 0.15 {
-        Rgba::new(color.red, color.green, color.blue, 1.0)
-    } else {
-        Rgba::new(0.0, 0.0, 0.0, 0.0)
-    }
-}
-
-fn flag_shader_middle_line(axis: f32, color: Rgb) -> Rgba {
-    if axis > 0.35 && axis < 0.65 {
-        Rgba::new(color.red, color.green, color.blue, 1.0)
-    } else {
-        Rgba::new(0.0, 0.0, 0.0, 0.0)
-    }
 }
